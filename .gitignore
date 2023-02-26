@@ -49,3 +49,5 @@ app.db
 *.zip
 
 # project data
+store-sales-time-series-forecasting
+store-sales-time-series-forecasting.zip
