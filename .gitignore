@@ -51,3 +51,7 @@ app.db
 # project data
 store-sales-time-series-forecasting
 store-sales-time-series-forecasting.zip
+
+# models
+models
+*.pkl
