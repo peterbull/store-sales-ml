@@ -3,8 +3,8 @@
 # %% auto 0
 __all__ = ['iskaggle', 'creds', 'cred_path', 'path', 'train_df', 'test_df', 'sub_df', 'stores_df', 'oil_df', 'hol_events_df',
            'transactions_df', 'combined_df', 'test_idxs', 'train_idxs', 'valid_idxs', 'eq_start_date', 'eq_end_date',
-           'earthquake_cond', 'earthquake_indexes', 'dep_var', 'procs', 'cont', 'cat', 'train_val_splits', 'to', 'xs',
-           'y', 'valid_xs', 'valid_y', 'm', 'dls', 'learn', 'r_mse', 'm_rmse', 'rf']
+           'earthquake_cond', 'earthquake_indexes', 'dep_var', 'procs', 'cont', 'cat', 'train_val_splits', 'to',
+           'test_to', 'xs', 'y', 'valid_xs', 'valid_y', 'm', 'dls', 'learn', 'r_mse', 'm_rmse', 'rf']
 
 # %% ../store_sales_2.ipynb 1
 from fastai.tabular.all import *
@@ -120,29 +120,35 @@ train_val_splits = (list(train_idxs), list(valid_idxs))
 # %% ../store_sales_2.ipynb 46
 to = TabularPandas(combined_df, procs, cat, cont, y_names=dep_var, splits=train_val_splits)
 
-# %% ../store_sales_2.ipynb 48
+# %% ../store_sales_2.ipynb 47
+test_to = TabularPandas(combined_df.iloc[test_idxs], procs, cat, cont, y_names=None, splits=None)
+
+# %% ../store_sales_2.ipynb 49
 xs, y = to.train.xs, to.train.y
 valid_xs, valid_y = to.valid.xs, to.valid.y
 
-# %% ../store_sales_2.ipynb 50
+# %% ../store_sales_2.ipynb 52
 def r_mse(pred, y):
     return round(math.sqrt(((pred-y)**2).mean()), 6)
 
-# %% ../store_sales_2.ipynb 51
+# %% ../store_sales_2.ipynb 53
 def m_rmse(m, xs, y):
     return r_mse(m.predict(xs), y)
 
-# %% ../store_sales_2.ipynb 53
+# %% ../store_sales_2.ipynb 55
 def rf(xs, y, n_estimators=40, max_samples=200_000, max_features=0.5, min_samples_leaf=5, **kwargs):
     return RandomForestRegressor(n_jobs=-1, n_estimators=n_estimators, 
                                  max_samples=max_samples, max_features=max_features,
                                  min_samples_leaf=min_samples_leaf, oob_score=True).fit(xs, y)
 
-# %% ../store_sales_2.ipynb 55
+# %% ../store_sales_2.ipynb 57
 m = rf(xs, y)
 
-# %% ../store_sales_2.ipynb 77
+# %% ../store_sales_2.ipynb 79
 dls = to.dataloaders(1024)
 
-# %% ../store_sales_2.ipynb 80
+# %% ../store_sales_2.ipynb 82
 learn = tabular_learner(dls, layers=[500, 250], n_out=1, y_range=(-11,11), loss_func=F.mse_loss)
+
+# %% ../store_sales_2.ipynb 84
+learn.fit_one_cycle(5, 1e-2)
