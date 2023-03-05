@@ -3,7 +3,8 @@
 # %% auto 0
 __all__ = ['iskaggle', 'creds', 'cred_path', 'path', 'train_df', 'test_df', 'sub_df', 'stores_df', 'oil_df', 'hol_events_df',
            'transactions_df', 'combined_df', 'test_idxs', 'train_idxs', 'valid_idxs', 'eq_start_date', 'eq_end_date',
-           'earthquake_cond', 'earthquake_indexes', 'procs', 'cont', 'cat', 'train_val_splits', 'to']
+           'earthquake_cond', 'earthquake_indexes', 'dep_var', 'procs', 'cont', 'cat', 'train_val_splits', 'to', 'xs',
+           'y', 'valid_xs', 'valid_y', 'm', 'dls', 'learn', 'r_mse', 'm_rmse', 'rf']
 
 # %% ../store_sales_2.ipynb 1
 from fastai.tabular.all import *
@@ -64,54 +65,84 @@ transactions_df = pd.read_csv(path/'transactions.csv', low_memory=False)
 # %% ../store_sales_2.ipynb 11
 combined_df = pd.concat([train_df, test_df]).reset_index()
 
-# %% ../store_sales_2.ipynb 14
+# %% ../store_sales_2.ipynb 13
 test_idxs = combined_df.index[(combined_df.index > train_df.index.max())] 
 
-# %% ../store_sales_2.ipynb 16
+# %% ../store_sales_2.ipynb 15
 train_idxs = combined_df.index[(combined_df.index < round(len(train_df) * 0.8))]
 
-# %% ../store_sales_2.ipynb 17
+# %% ../store_sales_2.ipynb 16
 valid_idxs = combined_df.index[(combined_df.index > len(train_idxs)) & (combined_df.index < test_idxs.min())]
 
-# %% ../store_sales_2.ipynb 20
+# %% ../store_sales_2.ipynb 18
 combined_df = combined_df.merge(oil_df, on='date', how='left')
 
-# %% ../store_sales_2.ipynb 22
+# %% ../store_sales_2.ipynb 20
 combined_df = combined_df.merge(stores_df, on='store_nbr', how='left')
 
-# %% ../store_sales_2.ipynb 24
+# %% ../store_sales_2.ipynb 22
 hol_events_df.rename(columns={'type': 'hol_type'}, inplace=True)
 
-# %% ../store_sales_2.ipynb 25
+# %% ../store_sales_2.ipynb 23
 # combined_df = combined_df.merge(hol_events_df, on='date', how='left')
 
-# %% ../store_sales_2.ipynb 27
+# %% ../store_sales_2.ipynb 25
 combined_df['date'] = pd.to_datetime(combined_df['date'])
 
-# %% ../store_sales_2.ipynb 29
+# %% ../store_sales_2.ipynb 27
 eq_start_date = pd.to_datetime("2016-04-16")
 eq_end_date = pd.to_datetime("2016-05-16")
 
-# %% ../store_sales_2.ipynb 30
+# %% ../store_sales_2.ipynb 28
 earthquake_cond = (combined_df.date >= eq_start_date) & (combined_df.date < eq_end_date)
 
-# %% ../store_sales_2.ipynb 32
+# %% ../store_sales_2.ipynb 30
 earthquake_indexes = combined_df.index[earthquake_cond]
 
-# %% ../store_sales_2.ipynb 34
+# %% ../store_sales_2.ipynb 32
 combined_df = add_datepart(combined_df, 'date')
+
+# %% ../store_sales_2.ipynb 36
+dep_var = 'sales'
 
 # %% ../store_sales_2.ipynb 38
 combined_df[dep_var] = np.log(combined_df[dep_var] + 1e-5)
 
-# %% ../store_sales_2.ipynb 39
+# %% ../store_sales_2.ipynb 40
 procs = [Categorify, FillMissing, Normalize]
 
-# %% ../store_sales_2.ipynb 40
+# %% ../store_sales_2.ipynb 42
 cont, cat = cont_cat_split(combined_df, 1, dep_var=dep_var)
 
-# %% ../store_sales_2.ipynb 41
+# %% ../store_sales_2.ipynb 44
 train_val_splits = (list(train_idxs), list(valid_idxs))
 
-# %% ../store_sales_2.ipynb 42
+# %% ../store_sales_2.ipynb 46
 to = TabularPandas(combined_df, procs, cat, cont, y_names=dep_var, splits=train_val_splits)
+
+# %% ../store_sales_2.ipynb 48
+xs, y = to.train.xs, to.train.y
+valid_xs, valid_y = to.valid.xs, to.valid.y
+
+# %% ../store_sales_2.ipynb 50
+def r_mse(pred, y):
+    return round(math.sqrt(((pred-y)**2).mean()), 6)
+
+# %% ../store_sales_2.ipynb 51
+def m_rmse(m, xs, y):
+    return r_mse(m.predict(xs), y)
+
+# %% ../store_sales_2.ipynb 53
+def rf(xs, y, n_estimators=40, max_samples=200_000, max_features=0.5, min_samples_leaf=5, **kwargs):
+    return RandomForestRegressor(n_jobs=-1, n_estimators=n_estimators, 
+                                 max_samples=max_samples, max_features=max_features,
+                                 min_samples_leaf=min_samples_leaf, oob_score=True).fit(xs, y)
+
+# %% ../store_sales_2.ipynb 55
+m = rf(xs, y)
+
+# %% ../store_sales_2.ipynb 77
+dls = to.dataloaders(1024)
+
+# %% ../store_sales_2.ipynb 80
+learn = tabular_learner(dls, layers=[500, 250], n_out=1, y_range=(-11,11), loss_func=F.mse_loss)
