@@ -16,6 +16,8 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import mean_squared_log_error
 
+import xgboost as xgb
+
 import seaborn as sns
 
 from dtreeviz.trees import *
@@ -69,136 +71,139 @@ combined_df = pd.concat([train_df, test_df]).reset_index()
 # %% ../store_sales_2.ipynb 14
 test_idxs = combined_df.index[(combined_df.index > train_df.index.max())] 
 
-# %% ../store_sales_2.ipynb 17
+# %% ../store_sales_2.ipynb 16
 train_idxs = combined_df.index[(combined_df.index < round(len(train_df) * 0.8))]
 
-# %% ../store_sales_2.ipynb 18
+# %% ../store_sales_2.ipynb 17
 valid_idxs = combined_df.index[(combined_df.index > len(train_idxs)) & (combined_df.index < test_idxs.min())]
 
-# %% ../store_sales_2.ipynb 20
+# %% ../store_sales_2.ipynb 19
 combined_df = combined_df.merge(oil_df, on='date', how='left')
 
-# %% ../store_sales_2.ipynb 24
+# %% ../store_sales_2.ipynb 21
 combined_df = combined_df.merge(stores_df, on='store_nbr', how='left')
 
-# %% ../store_sales_2.ipynb 26
+# %% ../store_sales_2.ipynb 24
 hol_events_df.rename(columns={'type': 'hol_type'}, inplace=True)
 
-# %% ../store_sales_2.ipynb 27
-# combined_df = combined_df.merge(hol_events_df, on='date', how='left')
+# %% ../store_sales_2.ipynb 25
+hol_events_df.drop_duplicates(subset='date', keep='first', inplace=True)
 
-# %% ../store_sales_2.ipynb 29
-# combined_df = combined_df.merge(transactions_df, on=['store_nbr', 'date'], how='left')
+# %% ../store_sales_2.ipynb 26
+combined_df = combined_df.merge(hol_events_df, on='date', how='left')
 
 # %% ../store_sales_2.ipynb 30
+# combined_df = combined_df.merge(transactions_df, on=['store_nbr', 'date'], how='left')
+
+# %% ../store_sales_2.ipynb 31
 # combined_df['transactions'] = combined_df.groupby(['date', 'store_nbr'])['transactions'].transform(lambda x: x.fillna(method='ffill'))
 
-# %% ../store_sales_2.ipynb 32
+# %% ../store_sales_2.ipynb 33
 combined_df['date'] = pd.to_datetime(combined_df['date'])
 
-# %% ../store_sales_2.ipynb 34
+# %% ../store_sales_2.ipynb 35
 eq_start_date = pd.to_datetime("2016-04-16")
 eq_end_date = pd.to_datetime("2016-05-16")
 
-# %% ../store_sales_2.ipynb 35
+# %% ../store_sales_2.ipynb 36
 earthquake_cond = (combined_df.date >= eq_start_date) & (combined_df.date < eq_end_date)
 
-# %% ../store_sales_2.ipynb 37
+# %% ../store_sales_2.ipynb 38
 earthquake_indexes = combined_df.index[earthquake_cond]
 
-# %% ../store_sales_2.ipynb 39
+# %% ../store_sales_2.ipynb 40
 combined_df = add_datepart(combined_df, 'date')
 
-# %% ../store_sales_2.ipynb 41
+# %% ../store_sales_2.ipynb 42
 # combined_df.drop(earthquake_indexes, inplace=True)
 
-# %% ../store_sales_2.ipynb 43
+# %% ../store_sales_2.ipynb 44
 dep_var = 'sales'
 
-# %% ../store_sales_2.ipynb 45
+# %% ../store_sales_2.ipynb 46
 combined_df[dep_var] = np.log(combined_df[dep_var] + 1e-5)
 
-# %% ../store_sales_2.ipynb 47
+# %% ../store_sales_2.ipynb 48
 procs = [Categorify, FillMissing, Normalize]
 
-# %% ../store_sales_2.ipynb 49
+# %% ../store_sales_2.ipynb 50
 cont, cat = cont_cat_split(combined_df, 1, dep_var=dep_var)
 
-# %% ../store_sales_2.ipynb 51
+# %% ../store_sales_2.ipynb 52
 train_val_splits = (list(train_idxs), list(valid_idxs))
 
-# %% ../store_sales_2.ipynb 53
+# %% ../store_sales_2.ipynb 54
 to = TabularPandas(combined_df, procs, cat, cont, y_names=dep_var, splits=train_val_splits)
 
-# %% ../store_sales_2.ipynb 54
+# %% ../store_sales_2.ipynb 55
 test_to = TabularPandas(combined_df.iloc[test_idxs], procs, cat, cont, y_names=None, splits=None)
 
-# %% ../store_sales_2.ipynb 56
+# %% ../store_sales_2.ipynb 57
 xs, y = to.train.xs, to.train.y
 valid_xs, valid_y = to.valid.xs, to.valid.y
 
-# %% ../store_sales_2.ipynb 57
+# %% ../store_sales_2.ipynb 58
 test_xs = test_to.train.xs
 
-# %% ../store_sales_2.ipynb 59
+# %% ../store_sales_2.ipynb 60
 def r_mse(pred, y):
     return round(math.sqrt(((pred-y)**2).mean()), 6)
 
-# %% ../store_sales_2.ipynb 60
+# %% ../store_sales_2.ipynb 61
 def m_rmse(m, xs, y):
     return r_mse(m.predict(xs), y)
 
-# %% ../store_sales_2.ipynb 62
+# %% ../store_sales_2.ipynb 63
 def rf(xs, y, n_estimators=40, max_samples=200_000, max_features=0.5, min_samples_leaf=5, **kwargs):
     return RandomForestRegressor(n_jobs=-1, n_estimators=n_estimators, 
                                  max_samples=max_samples, max_features=max_features,
                                  min_samples_leaf=min_samples_leaf, oob_score=True).fit(xs, y)
 
-# %% ../store_sales_2.ipynb 64
+# %% ../store_sales_2.ipynb 65
 m = rf(xs, y)
 
-# %% ../store_sales_2.ipynb 86
+# %% ../store_sales_2.ipynb 88
 dls = to.dataloaders(1024)
 
-# %% ../store_sales_2.ipynb 89
+# %% ../store_sales_2.ipynb 91
 learn = tabular_learner(dls, layers=[500, 250], n_out=1, y_range=(-11,11), loss_func=F.mse_loss)
 
-# %% ../store_sales_2.ipynb 91
+# %% ../store_sales_2.ipynb 93
 learn.fit_one_cycle(5, 1e-2)
 
-# %% ../store_sales_2.ipynb 92
+# %% ../store_sales_2.ipynb 95
 preds, targs = learn.get_preds()
 r_mse(preds, targs)
 
-# %% ../store_sales_2.ipynb 93
+# %% ../store_sales_2.ipynb 96
 rf_preds = m.predict(valid_xs)
 
-# %% ../store_sales_2.ipynb 94
+# %% ../store_sales_2.ipynb 97
 ens_preds = (to_np(preds.squeeze()) + rf_preds) /2
 
-# %% ../store_sales_2.ipynb 96
+# %% ../store_sales_2.ipynb 99
 rf_test_preds = m.predict(test_xs)
 
-# %% ../store_sales_2.ipynb 97
+# %% ../store_sales_2.ipynb 100
 dl = learn.dls.test_dl(combined_df.iloc[test_idxs])
 
-# %% ../store_sales_2.ipynb 98
+# %% ../store_sales_2.ipynb 101
 preds = learn.get_preds(dl=dl)
 
-# %% ../store_sales_2.ipynb 101
+# %% ../store_sales_2.ipynb 104
 np_preds = to_np(preds[0]).reshape(-1)
 
-# %% ../store_sales_2.ipynb 103
+# %% ../store_sales_2.ipynb 106
 ens_preds = (np_preds + rf_test_preds) / 2
 
-# %% ../store_sales_2.ipynb 105
+# %% ../store_sales_2.ipynb 108
 learn.save('nn2')
 
-# %% ../store_sales_2.ipynb 107
+# %% ../store_sales_2.ipynb 110
 ens_preds_norm = np.exp(ens_preds + 1e-5)
 
-# %% ../store_sales_2.ipynb 109
+# %% ../store_sales_2.ipynb 112
 sub_df['sales'] = ens_preds_norm
 
-# %% ../store_sales_2.ipynb 112
+# %% ../store_sales_2.ipynb 115
 sub_df.to_csv('submission.csv', index=False)
