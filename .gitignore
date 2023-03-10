@@ -55,3 +55,6 @@ store-sales-time-series-forecasting.zip
 # models
 models
 *.pkl
+
+# epoch history
+history.csv
